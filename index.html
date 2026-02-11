@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AntiDante</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Modal: GStreamer not found -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>⚠ GStreamer не найден</h2>
+      <div id="modal-body">
+        <p>Для работы приложения необходим <b>GStreamer</b> с поддержкой WASAPI2.</p>
+        <h3>Инструкция по установке:</h3>
+        <ol>
+          <li>Скачайте GStreamer (MSVC 64-bit) с официального сайта:<br>
+            <a href="https://gstreamer.freedesktop.org/download/" id="link-gst" target="_blank">https://gstreamer.freedesktop.org/download/</a>
+          </li>
+          <li>Установите <b>оба</b> пакета: <b>runtime</b> и <b>development</b></li>
+          <li>При установке выберите <b>Complete</b> (полная установка)</li>
+          <li>Добавьте <code>C:\gstreamer\1.0\msvc_x86_64\bin</code> в системную переменную <code>PATH</code></li>
+          <li>Перезапустите приложение</li>
+        </ol>
+        <div id="modal-missing-plugins"></div>
+      </div>
+      <button id="modal-close-btn" class="btn btn-primary">Закрыть</button>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-title">
+      <span class="logo">◉</span> AntiDante
+      <span id="gst-version" class="gst-badge"></span>
+    </div>
+    <button id="btn-refresh" class="btn btn-icon" title="Обновить устройства">↻</button>
+  </header>
+
+  <!-- Device list -->
+  <main id="device-list" class="device-list">
+    <div class="placeholder">Загрузка устройств…</div>
+  </main>
+
+  <!-- Network stats bar -->
+  <footer id="net-stats-bar" class="net-stats-bar"></footer>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
