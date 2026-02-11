@@ -175,6 +175,17 @@ a:hover { color: var(--accent-hover); }
   outline: none; width: 100%;
 }
 .settings-grid input:focus, .settings-grid select:focus { border-color: var(--accent); }
+
+/* Changed (dirty) field highlight */
+.settings-grid input.dirty,
+.settings-grid select.dirty {
+  border-color: var(--yellow);
+  background: var(--yellow-bg);
+}
+.checkbox-row input[type="checkbox"].dirty + span {
+  color: var(--yellow) !important;
+}
+
 .settings-grid select { cursor: pointer; }
 
 .ip-row {
@@ -193,6 +204,23 @@ a:hover { color: var(--accent-hover); }
   display: flex; gap: 6px; margin-top: 6px; justify-content: flex-end;
 }
 
+/* Save button: hidden until there are changes */
+.btn-save {
+  opacity: 0.3;
+  pointer-events: none;
+  transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+}
+.btn-save.has-changes {
+  opacity: 1;
+  pointer-events: auto;
+  background: rgba(234,179,8,0.18);
+  border-color: var(--yellow-border);
+  color: var(--yellow);
+}
+.btn-save.has-changes:hover {
+  background: rgba(234,179,8,0.30);
+}
+
 .checkbox-row {
   display: flex; align-items: center; gap: 6px;
 }
@@ -204,24 +232,3 @@ a:hover { color: var(--accent-hover); }
   font-size: 11px; color: var(--red); margin-top: 4px;
   font-family: var(--mono); word-break: break-all;
 }
-
-/* ── Network stats bar ───────────────────────────────────────────────────── */
-.net-stats-bar {
-  display: flex; flex-shrink: 0; border-top: 1px solid var(--border);
-  background: #18181b; overflow-x: auto; min-height: 24px;
-}
-.net-stat-tile {
-  display: flex; align-items: center; gap: 8px;
-  padding: 3px 12px; border-right: 1px solid var(--border);
-  white-space: nowrap; font-size: 11px; min-width: 0;
-}
-.net-stat-tile:last-child { border-right: none; }
-.net-stat-name {
-  color: var(--text-dim); font-weight: 500; max-width: 100px;
-  overflow: hidden; text-overflow: ellipsis;
-}
-.net-stat-values { display: flex; gap: 6px; }
-.net-rx { color: var(--green); }
-.net-tx { color: var(--accent); }
-.net-rx::before { content: '↓ '; opacity: 0.6; }
-.net-tx::before { content: '↑ '; opacity: 0.6; }

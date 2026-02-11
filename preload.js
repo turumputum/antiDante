@@ -14,5 +14,4 @@ contextBridge.exposeInMainWorld('api', {
 
   onStreamStatus: (cb) => ipcRenderer.on('stream-status', (_, data) => cb(data)),
   onStreamLog: (cb) => ipcRenderer.on('stream-log', (_, data) => cb(data)),
-  onNetStats: (cb) => ipcRenderer.on('net-stats', (_, data) => cb(data)),
 });

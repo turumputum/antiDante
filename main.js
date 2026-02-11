@@ -4,7 +4,6 @@ const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const dgram = require('dgram');
 const os = require('os');
-const si = require('systeminformation');
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'settings.json');
 
@@ -149,22 +148,20 @@ function checkMulticastInUse(host, port) {
 const runningProcesses = {}; // deviceId -> child_process
 
 function buildPipeline(deviceId, cfg) {
-  const loopback = cfg.loopback !== false ? 'loopback=true' : '';
   const bindAddr = cfg.bindAddress && cfg.bindAddress !== '0.0.0.0'
     ? `bind-address=${cfg.bindAddress}` : '';
-  return `gst-launch-1.0 -e wasapi2src device="${deviceId}" ${loopback} ! audio/x-raw,channels=2,rate=48000 ! audioconvert ! audioresample ! rtpL16pay ! udpsink host=${cfg.host} port=${cfg.port} auto-multicast=true ${bindAddr}`.replace(/\s+/g, ' ').trim();
+  return `gst-launch-1.0 -e wasapi2src device="${deviceId}" loopback=true ! audio/x-raw,channels=2,rate=48000 ! audioconvert ! audioresample ! rtpL16pay ! udpsink host=${cfg.host} port=${cfg.port} auto-multicast=true ${bindAddr}`.replace(/\s+/g, ' ').trim();
 }
 
 function startStream(deviceId, cfg) {
   if (runningProcesses[deviceId]) return { ok: false, error: 'Already running' };
 
-  const loopback = cfg.loopback !== false ? 'loopback=true' : '';
   const bindAddr = cfg.bindAddress && cfg.bindAddress !== '0.0.0.0'
     ? `bind-address=${cfg.bindAddress}` : '';
 
   const args = [
     '-e',
-    'wasapi2src', `device=${deviceId}`, ...(loopback ? [loopback] : []),
+    'wasapi2src', `device=${deviceId}`, 'loopback=true',
     '!', 'audio/x-raw,channels=2,rate=48000',
     '!', 'audioconvert',
     '!', 'audioresample',
@@ -225,35 +222,6 @@ function getNetworkInterfaces() {
   return result;
 }
 
-// ── Network stats polling ───────────────────────────────────────────────────
-
-let netStatsInterval = null;
-
-function startNetStatsPolling(win) {
-  if (netStatsInterval) clearInterval(netStatsInterval);
-  netStatsInterval = setInterval(async () => {
-    try {
-      const stats = await si.networkStats();
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('net-stats', stats.map(s => ({
-          iface: s.iface,
-          rx_sec: s.rx_sec,
-          tx_sec: s.tx_sec,
-          rx_bytes: s.rx_bytes,
-          tx_bytes: s.tx_bytes
-        })));
-      }
-    } catch {}
-  }, 1000);
-}
-
-function stopNetStatsPolling() {
-  if (netStatsInterval) {
-    clearInterval(netStatsInterval);
-    netStatsInterval = null;
-  }
-}
-
 // ── Window ──────────────────────────────────────────────────────────────────
 
 let mainWindow = null;
@@ -275,11 +243,9 @@ function createWindow() {
 
   mainWindow.setMenu(null);
   mainWindow.loadFile('index.html');
-  startNetStatsPolling(mainWindow);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
-    stopNetStatsPolling();
   });
 }
 
@@ -338,7 +304,6 @@ app.on('window-all-closed', () => {
   for (const id of Object.keys(runningProcesses)) {
     stopStream(id);
   }
-  stopNetStatsPolling();
   app.quit();
 });
 

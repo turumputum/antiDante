@@ -10,20 +10,12 @@ const $$ = (s, p) => [...(p || document).querySelectorAll(s)];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatSpeed(bytesPerSec) {
-  if (bytesPerSec == null || isNaN(bytesPerSec)) return '0 B/s';
-  if (bytesPerSec < 1024) return bytesPerSec.toFixed(0) + ' B/s';
-  if (bytesPerSec < 1024 * 1024) return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
-  return (bytesPerSec / (1024 * 1024)).toFixed(2) + ' MB/s';
-}
-
 function getDeviceConfig(deviceId) {
   return config.devices[deviceId] || {
     host: '239.0.7.1',
     hostSuffix: '1',
     port: 7777,
     bindAddress: '0.0.0.0',
-    loopback: true,
     autoStart: false,
     enabled: false
   };
@@ -103,12 +95,6 @@ function renderDevices() {
             ).join('')}
           </select>
 
-          <label>Loopback:</label>
-          <div class="checkbox-row">
-            <input type="checkbox" class="cfg-loopback" data-id="${escAttr(dev.id)}" ${cfg.loopback !== false ? 'checked' : ''}>
-            <span style="font-size:11px;color:var(--text-dim)">Захват звука приложений</span>
-          </div>
-
           <label>Автозапуск:</label>
           <div class="checkbox-row">
             <input type="checkbox" class="cfg-autostart" data-id="${escAttr(dev.id)}" ${cfg.autoStart ? 'checked' : ''}>
@@ -171,16 +157,62 @@ function bindDeviceEvents() {
       saveDeviceSettings(deviceId);
     });
   }
+
+  // Dirty-tracking for settings fields
+  for (const card of $$('.device-card')) {
+    const deviceId = card.dataset.deviceId;
+    const cfg = getDeviceConfig(deviceId);
+
+    const suffixInput = $('.cfg-host-suffix', card);
+    const portInput = $('.cfg-port', card);
+    const bindSelect = $('.cfg-bind', card);
+    const autoStartCheck = $('.cfg-autostart', card);
+    const saveBtn = $('.btn-save', card);
+
+    const savedValues = {
+      hostSuffix: String(cfg.hostSuffix || '1'),
+      port: String(cfg.port || 7777),
+      bindAddress: cfg.bindAddress || '0.0.0.0',
+      autoStart: !!cfg.autoStart
+    };
+
+    function checkDirty() {
+      let hasDirty = false;
+
+      const fields = [
+        { el: suffixInput, current: suffixInput.value.trim(), saved: savedValues.hostSuffix },
+        { el: portInput, current: portInput.value.trim(), saved: savedValues.port },
+        { el: bindSelect, current: bindSelect.value, saved: savedValues.bindAddress },
+      ];
+
+      for (const f of fields) {
+        const isDirty = f.current !== f.saved;
+        f.el.classList.toggle('dirty', isDirty);
+        if (isDirty) hasDirty = true;
+      }
+
+      // Checkbox dirty
+      const autoStartDirty = autoStartCheck.checked !== savedValues.autoStart;
+      autoStartCheck.classList.toggle('dirty', autoStartDirty);
+      if (autoStartDirty) hasDirty = true;
+
+      saveBtn.classList.toggle('has-changes', hasDirty);
+    }
+
+    suffixInput.addEventListener('input', checkDirty);
+    portInput.addEventListener('input', checkDirty);
+    bindSelect.addEventListener('change', checkDirty);
+    autoStartCheck.addEventListener('change', checkDirty);
+  }
 }
 
-function saveDeviceSettings(deviceId) {
+async function saveDeviceSettings(deviceId) {
   const card = $(`.device-card[data-device-id="${CSS.escape(deviceId)}"]`);
   if (!card) return;
 
   const suffix = $(`.cfg-host-suffix[data-id="${CSS.escape(deviceId)}"]`, card).value.trim();
   const port = $(`.cfg-port[data-id="${CSS.escape(deviceId)}"]`, card).value.trim();
   const bind = $(`.cfg-bind[data-id="${CSS.escape(deviceId)}"]`, card).value;
-  const loopback = $(`.cfg-loopback[data-id="${CSS.escape(deviceId)}"]`, card).checked;
   const autoStart = $(`.cfg-autostart[data-id="${CSS.escape(deviceId)}"]`, card).checked;
 
   const cfg = {
@@ -188,12 +220,20 @@ function saveDeviceSettings(deviceId) {
     hostSuffix: suffix,
     port: parseInt(port, 10) || 7777,
     bindAddress: bind,
-    loopback,
     autoStart,
     enabled: true
   };
 
+  const wasRunning = runningStreams.has(deviceId);
+
   setDeviceConfig(deviceId, cfg);
+
+  // Restart stream if it was running
+  if (wasRunning) {
+    await doStopStream(deviceId);
+    await doStartStream(deviceId);
+  }
+
   renderDevices();
 }
 
@@ -223,8 +263,7 @@ async function doStartStream(deviceId) {
   const streamCfg = {
     host,
     port,
-    bindAddress: cfg.bindAddress || '0.0.0.0',
-    loopback: cfg.loopback
+    bindAddress: cfg.bindAddress || '0.0.0.0'
   };
 
   const result = await window.api.startStream(deviceId, streamCfg);
@@ -249,26 +288,6 @@ function updateCardStatus(deviceId, status) {
   card.classList.add(`status-${status}`);
   const toggle = $('.toggle-stream', card);
   if (toggle) toggle.checked = status === 'running';
-}
-
-// ── Network stats ───────────────────────────────────────────────────────────
-
-function renderNetStats(stats) {
-  const bar = $('#net-stats-bar');
-  if (!stats || !stats.length) {
-    bar.innerHTML = '<div class="net-stat-tile"><span class="net-stat-name">Нет данных</span></div>';
-    return;
-  }
-
-  bar.innerHTML = stats.map(s => `
-    <div class="net-stat-tile">
-      <span class="net-stat-name" title="${escHtml(s.iface)}">${escHtml(s.iface)}</span>
-      <span class="net-stat-values">
-        <span class="net-rx">${formatSpeed(s.rx_sec)}</span>
-        <span class="net-tx">${formatSpeed(s.tx_sec)}</span>
-      </span>
-    </div>
-  `).join('');
 }
 
 // ── Auto-start streams ─────────────────────────────────────────────────────
@@ -342,10 +361,6 @@ async function init() {
   window.api.onStreamLog((data) => {
     console.warn(`[Stream ${data.deviceId}]`, data.message);
   });
-
-  window.api.onNetStats((stats) => {
-    renderNetStats(stats);
-  });
 }
 
 async function refreshDevices() {
@@ -361,7 +376,6 @@ async function refreshDevices() {
         hostSuffix: '1',
         port: 7777,
         bindAddress: '0.0.0.0',
-        loopback: true,
         autoStart: false,
         enabled: false
       };

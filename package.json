@@ -12,7 +12,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "electron": "^33.3.1",
-    "systeminformation": "^5.25.11"
+    "electron": "^33.3.1"
   }
 }
