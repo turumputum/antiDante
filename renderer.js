@@ -29,7 +29,7 @@ function setDeviceConfig(deviceId, cfg) {
 function validateSettings(cfg) {
   const errors = [];
   const suffix = parseInt(cfg.hostSuffix, 10);
-  if (isNaN(suffix) || suffix < 1 || suffix > 254) errors.push('Последний октет IP должен быть 1–254');
+  if (isNaN(suffix) || suffix < 0 || suffix > 254) errors.push('Последний октет IP должен быть 0–254');
   const port = parseInt(cfg.port, 10);
   if (isNaN(port) || port < 1024 || port > 65535) errors.push('Порт должен быть 1024–65535');
   return errors;
