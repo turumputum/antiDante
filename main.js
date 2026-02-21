@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
@@ -60,27 +60,28 @@ function enumerateDevices() {
 
     const devices = [];
     const blocks = raw.split(/\n\s*\n/);
-    let currentDevice = null;
 
     for (const block of blocks) {
       const nameMatch = block.match(/name\s*:\s*(.+)/i);
       const classMatch = block.match(/class\s*:\s*(.+)/i);
-      const propSection = block.match(/properties\s*:([\s\S]*?)(?=\n\s*\n|$)/i);
-      const deviceIdMatch = block.match(/device\.id\s*=\s*(.+)/i) ||
-                            block.match(/object\.id\s*=\s*(.+)/i);
 
-      // Try to extract the device path / GUID
-      const guidMatch = block.match(/\{[0-9a-fA-F\-]{36}\}/);
+      // Extract the full device.id value (e.g. {0.0.0.00000000}.{guid} or just {guid})
+      const deviceIdMatch = block.match(/device\.id\s*=\s*(\S+)/i);
+      // Extract loopback flag
+      const loopbackMatch = block.match(/wasapi2\.device\.loopback\s*=\s*(\w+)/i);
       const apiMatch = block.match(/device\.api\s*=\s*(\S+)/i);
 
-      if (nameMatch) {
-        currentDevice = {
+      if (nameMatch && deviceIdMatch) {
+        const fullId = deviceIdMatch[1].trim();
+        const isLoopback = loopbackMatch ? loopbackMatch[1] === 'true' : false;
+
+        devices.push({
           name: nameMatch[1].trim(),
-          id: guidMatch ? guidMatch[0] : (deviceIdMatch ? deviceIdMatch[1].trim() : nameMatch[1].trim()),
+          id: fullId,
           class: classMatch ? classMatch[1].trim() : 'Unknown',
-          isLoopback: /monitor|loopback|stereo mix|what u hear/i.test(block)
-        };
-        devices.push(currentDevice);
+          api: apiMatch ? apiMatch[1].trim() : 'unknown',
+          isLoopback: isLoopback
+        });
       }
     }
 
@@ -96,11 +97,16 @@ function enumerateDevices() {
 
     // Deduplicate by id
     const seen = new Set();
-    return devices.filter(d => {
+    const uniqueDevices = devices.filter(d => {
       if (seen.has(d.id)) return false;
       seen.add(d.id);
       return true;
     });
+
+    // Sort devices alphabetically by name
+    uniqueDevices.sort((a, b) => a.name.localeCompare(b.name));
+
+    return uniqueDevices;
   } catch (e) {
     console.error('Device enumeration failed:', e.message);
     return [];
@@ -150,7 +156,8 @@ const runningProcesses = {}; // deviceId -> child_process
 function buildPipeline(deviceId, cfg) {
   const bindAddr = cfg.bindAddress && cfg.bindAddress !== '0.0.0.0'
     ? `bind-address=${cfg.bindAddress}` : '';
-  return `gst-launch-1.0 -e wasapi2src device="${deviceId}" loopback=true ! audio/x-raw,channels=2,rate=48000 ! audioconvert ! audioresample ! rtpL16pay ! udpsink host=${cfg.host} port=${cfg.port} auto-multicast=true ${bindAddr}`.replace(/\s+/g, ' ').trim();
+  const loopback = cfg.isLoopback ? 'loopback=true' : '';
+  return `gst-launch-1.0 -e wasapi2src device="${deviceId}" ${loopback} ! audio/x-raw,channels=2,rate=48000 ! audioconvert ! audioresample ! rtpL16pay ! udpsink host=${cfg.host} port=${cfg.port} auto-multicast=true ${bindAddr}`.replace(/\s+/g, ' ').trim();
 }
 
 function startStream(deviceId, cfg) {
@@ -161,7 +168,8 @@ function startStream(deviceId, cfg) {
 
   const args = [
     '-e',
-    'wasapi2src', `device=${deviceId}`, 'loopback=true',
+    'wasapi2src', `device=${deviceId}`,
+    ...(cfg.isLoopback ? ['loopback=true'] : []),
     '!', 'audio/x-raw,channels=2,rate=48000',
     '!', 'audioconvert',
     '!', 'audioresample',
@@ -296,8 +304,29 @@ app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('in-process-gpu');
 app.commandLine.appendSwitch('use-angle', 'swiftshader');
 app.commandLine.appendSwitch('use-gl', 'angle');
+// ── Offline: prevent any outgoing network from Electron/Chromium ────────────
+app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-component-update');
+app.commandLine.appendSwitch('disable-domain-reliability');
+app.commandLine.appendSwitch('disable-sync');
+app.commandLine.appendSwitch('disable-default-apps');
+app.commandLine.appendSwitch('no-proxy-server');
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Block all outgoing HTTP(S) requests at the session level
+  session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+    const url = details.url;
+    // Allow only local file:// and devtools:// protocols
+    if (url.startsWith('file://') || url.startsWith('devtools://') || url.startsWith('chrome-devtools://')) {
+      callback({});
+    } else {
+      console.log(`[offline] Blocked external request: ${url}`);
+      callback({ cancel: true });
+    }
+  });
+
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   // Stop all streams before quitting

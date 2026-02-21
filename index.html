@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none';">
   <title>AntiDante</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -16,7 +17,7 @@
         <h3>Инструкция по установке:</h3>
         <ol>
           <li>Скачайте GStreamer (MSVC 64-bit) с официального сайта:<br>
-            <a href="https://gstreamer.freedesktop.org/download/" id="link-gst" target="_blank">https://gstreamer.freedesktop.org/download/</a>
+            <code>https://gstreamer.freedesktop.org/download/</code>
           </li>
           <li>Установите <b>оба</b> пакета: <b>runtime</b> и <b>development</b></li>
           <li>При установке выберите <b>Complete</b> (полная установка)</li>

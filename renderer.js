@@ -260,10 +260,14 @@ async function doStartStream(deviceId) {
     }
   } catch {}
 
+  // Find the device to get isLoopback flag
+  const dev = devices.find(d => d.id === deviceId);
+
   const streamCfg = {
     host,
     port,
-    bindAddress: cfg.bindAddress || '0.0.0.0'
+    bindAddress: cfg.bindAddress || '0.0.0.0',
+    isLoopback: dev ? dev.isLoopback : false
   };
 
   const result = await window.api.startStream(deviceId, streamCfg);
